@@ -8,12 +8,17 @@ import (
 	"os"
 	"time"
 
+	sslhostsproxier "github.com/Memexurer/ssl-hosts-proxier"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 func main() {
+	if sslhostsproxier.CheckPermissions() != nil {
+		panic("Please run this utility as admin")
+	}
+
 	var domain, url string
 
 	if len(os.Args) != 3 {
