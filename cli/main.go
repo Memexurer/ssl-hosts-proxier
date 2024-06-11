@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,28 +20,36 @@ func main() {
 		panic("Please run this utility as admin")
 	}
 
-	var domain, url string
+	var hosts map[string]string
 
-	if len(os.Args) != 3 {
-		model := initialModel()
-		p := tea.NewProgram(&model)
-		model.program = p
-
-		if _, err := p.Run(); err != nil {
-			log.Fatal(err)
+	config, err := os.ReadFile("config.json")
+	if err == nil {
+		fmt.Println("config.json found - using it instead for configuration")
+		err = json.Unmarshal(config, &hosts)
+		if err != nil {
+			panic(err)
 		}
-
-		domain = model.textInputs[0].Value()
-		url = model.textInputs[1].Value()
 	} else {
-		domain = os.Args[1]
-		url = os.Args[2]
+		if len(os.Args) != 3 {
+			model := initialModel()
+			p := tea.NewProgram(&model)
+			model.program = p
+
+			if _, err := p.Run(); err != nil {
+				log.Fatal(err)
+			}
+
+			hosts = map[string]string{
+				model.textInputs[0].Value(): model.textInputs[1].Value(),
+			}
+		} else {
+			hosts = map[string]string{
+				os.Args[1]: os.Args[2],
+			}
+		}
 	}
 
-	StartMain(
-		domain,
-		url,
-	)
+	StartMain(hosts)
 }
 
 type model struct {

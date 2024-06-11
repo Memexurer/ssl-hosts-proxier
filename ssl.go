@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"io/fs"
 	"math/big"
 	"net"
@@ -32,15 +33,27 @@ func GetServerCert(name string) string {
 	return getBaseDirectory(name) + "server.crt"
 }
 
-func CreateTLSConfig(name string) *tls.Config {
-	certs := findSSLCerts(name)
-	srvCert, err := tls.X509KeyPair(certs.ServerCrt, certs.ServerKey)
-	if err != nil {
-		panic(err)
+func CreateTLSConfig(names []string) *tls.Config {
+	nameToCert := make(map[string]*tls.Certificate, len(names))
+
+	for _, name := range names {
+		certs := findSSLCerts(name)
+		srvCert, err := tls.X509KeyPair(certs.ServerCrt, certs.ServerKey)
+		if err != nil {
+			panic(err)
+		}
+		nameToCert[name] = &srvCert
 	}
 
 	return &tls.Config{
-		Certificates: []tls.Certificate{srvCert},
+		GetCertificate: func(chi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			cert, ok := nameToCert[chi.ServerName]
+			if !ok {
+				return nil, fmt.Errorf("no such server (%s)", chi.ServerName)
+			}
+
+			return cert, nil
+		},
 	}
 }
 

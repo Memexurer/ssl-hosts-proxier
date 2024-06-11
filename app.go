@@ -2,6 +2,7 @@ package sslhostsproxier
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 )
@@ -10,34 +11,37 @@ type Logger func(log string)
 
 type App struct {
 	dnsRunning   bool
+	httpRunning  bool
 	httpsRunning bool
 
 	ShuttingDown bool
 
-	domain string
-	target string
+	domainTargetProxyMap map[string]string
 
-	dns    *DnsServer
-	server *http.Server
+	dns         *DnsServer
+	httpsServer *http.Server
+	httpServer  *http.Server
 }
 
-func CreateApp(domain string, target string) App {
+func CreateApp(domainTargetProxyMap map[string]string) App {
 	dnsServer := CreateDnsServer()
-	httpsServer := CreateSSLReverseProxy(domain, target)
+	httpsServer := CreateSSLReverseProxy(domainTargetProxyMap)
+	httpServer := CreateHttpToSSLProxy(domainTargetProxyMap)
 
 	return App{
 		false,
 		false,
 		false,
-		domain,
-		target,
+		false,
+		domainTargetProxyMap,
 		dnsServer,
 		httpsServer,
+		httpServer,
 	}
 }
 
 func (app *App) IsReady() bool {
-	return app.dnsRunning && app.httpsRunning
+	return app.dnsRunning && app.httpsRunning && app.httpRunning
 }
 
 func (app *App) Start(log Logger) {
@@ -45,22 +49,26 @@ func (app *App) Start(log Logger) {
 		log("DNS server started")
 		app.dnsRunning = true
 	}
-	err := CreateLocalNrptResolution(app.domain)
-	if err != nil {
-		panic(err)
-	}
-	log("NRPT resolution created")
 
-	certPath := GetServerCert(app.domain)
-	TrustCertificate(certPath)
-	log("HTTPS reverse proxy certificate for " + app.domain + " added to system keystore")
+	for domain, _ := range app.domainTargetProxyMap {
+		err := CreateLocalNrptResolution(domain)
+		if err != nil {
+			panic(err)
+		}
+		log(fmt.Sprintf("[%s] Added NRPT entry", domain))
+
+		certPath := GetServerCert(domain)
+		TrustCertificate(certPath)
+
+		log(fmt.Sprintf("[%s] Added certificate to keystore", domain))
+	}
 
 	go func() {
 		app.dns.ListenAndServe()
 	}()
 
 	go func() {
-		ln, err := net.Listen("tcp", app.server.Addr)
+		ln, err := net.Listen("tcp", app.httpsServer.Addr)
 		if err != nil {
 			panic(err)
 		}
@@ -68,7 +76,25 @@ func (app *App) Start(log Logger) {
 		app.httpsRunning = true
 		log("HTTPS proxy started")
 
-		_ = app.server.ServeTLS(ln, "", "")
+		err = app.httpsServer.ServeTLS(ln, "", "")
+		if err != nil && err != http.ErrServerClosed {
+			panic(err)
+		}
+	}()
+
+	go func() {
+		l, err := net.Listen("tcp", app.httpServer.Addr)
+		if err != nil {
+			panic(err)
+		}
+
+		app.httpRunning = true
+		log("HTTP->HTTPS proxy started")
+
+		err = app.httpServer.Serve(l)
+		if err != nil && err != http.ErrServerClosed {
+			panic(err)
+		}
 	}()
 
 }
@@ -76,23 +102,32 @@ func (app *App) Start(log Logger) {
 func (app *App) Stop(log Logger) {
 	app.ShuttingDown = true
 
-	err := DeleteLocalNrptResolution(app.domain)
-	if err != nil {
-		panic(err)
-	}
-	log("Deleted local NRPT resolution")
+	for domain, _ := range app.domainTargetProxyMap {
+		err := DeleteLocalNrptResolution(domain)
+		if err != nil {
+			panic(err)
+		}
+		log(fmt.Sprintf("[%s] Removed NRPT entry", domain))
 
-	err = UntrustUs(app.domain)
-	if err != nil {
-		panic(err)
-	}
-	log("Untrusted our certfificate")
+		err = UntrustUs(domain)
+		if err != nil {
+			panic(err)
+		}
+		log(fmt.Sprintf("[%s] Removed certificate from keystore", domain))
 
-	err = app.server.Shutdown(context.Background())
+	}
+
+	err := app.httpsServer.Shutdown(context.Background())
 	if err != nil {
 		panic(err)
 	}
 	log("HTTPS proxy shutdown")
+
+	err = app.httpServer.Shutdown(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	log("HTTP->HTTPS proxy shutdown")
 
 	app.dns.Shutdown()
 	log("DNS server shutdown")

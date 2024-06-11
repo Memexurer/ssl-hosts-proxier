@@ -11,9 +11,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func StartMain(domain string, url string) {
+func StartMain(wompWomp map[string]string) {
 	model := initialModelMain()
-	model.app = sslhostsproxier.CreateApp(domain, url)
+	model.app = sslhostsproxier.CreateApp(wompWomp)
 
 	p := tea.NewProgram(&model)
 	model.program = p
