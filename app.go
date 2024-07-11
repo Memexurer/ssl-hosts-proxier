@@ -50,6 +50,10 @@ func (app *App) Start(log Logger) {
 		app.dnsRunning = true
 	}
 
+	CreateTempCertsBundle()
+
+	log("Please restart every cmd to make sure the REQUESTS_CA_BUNDLE env was updated")
+
 	for domain, _ := range app.domainTargetProxyMap {
 		err := CreateLocalNrptResolution(domain)
 		if err != nil {
@@ -59,6 +63,11 @@ func (app *App) Start(log Logger) {
 
 		certPath := GetServerCert(domain)
 		TrustCertificate(certPath)
+
+		err = AppendCustomCertToBundle(certPath)
+		if err != nil {
+			panic(err)
+		}
 
 		log(fmt.Sprintf("[%s] Added certificate to keystore", domain))
 	}
@@ -101,6 +110,9 @@ func (app *App) Start(log Logger) {
 
 func (app *App) Stop(log Logger) {
 	app.ShuttingDown = true
+
+	DeleteTempCertsBundle()
+	log("Please restart every cmd to make sure the REQUESTS_CA_BUNDLE env was updated")
 
 	for domain, _ := range app.domainTargetProxyMap {
 		err := DeleteLocalNrptResolution(domain)

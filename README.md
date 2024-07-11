@@ -6,3 +6,9 @@ Automatically does these things:
 
 https://github.com/Memexurer/ssl-hosts-proxier/assets/34003944/45f16fb7-c883-405c-acf5-0f67fb8eb19b
 
+
+
+# building
+cd cli
+go build .
+move cli.exe ../
