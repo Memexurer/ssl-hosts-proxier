@@ -38,7 +38,7 @@ func UntrustUs(name string) error {
 }
 
 func CreateLocalNrptResolution(name string) error {
-	if _, err := powershell(fmt.Sprintf(`Add-DnsClientNrptRule -Namespace ".%s" -NameServers "127.0.0.1"`, name)); err != nil {
+	if _, err := powershell(fmt.Sprintf(`Add-DnsClientNrptRule -Namespace "%s" -NameServers "127.0.0.1"`, name)); err != nil {
 		return fmt.Errorf("unable to install dns handlers")
 	}
 
@@ -46,7 +46,7 @@ func CreateLocalNrptResolution(name string) error {
 }
 
 func DeleteLocalNrptResolution(name string) error {
-	if _, err := powershell(fmt.Sprintf(`Get-DnsClientNrptRule | ForEach-Object -Process { if ($_.Namespace -eq ".%s") { Remove-DnsClientNrptRule -Force $_.Name } }`, name)); err != nil {
+	if _, err := powershell(fmt.Sprintf(`Get-DnsClientNrptRule | ForEach-Object -Process { if ($_.Namespace -eq "%s") { Remove-DnsClientNrptRule -Force $_.Name } }`, name)); err != nil {
 		return fmt.Errorf("unable to clear dns handlers")
 	}
 
